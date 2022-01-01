@@ -5,6 +5,7 @@
 
 ## Table of contents
 - [General Info](#General-Info)
+- [Team Members](#Team-Members)
 - [To-Do(s)](#TO-DO)
 - [Tools Used](#Tools-Used)
 - [Contributing](#Contributing)
@@ -13,12 +14,19 @@
 ## General Info
 We segment every frame of the video into regions of different motions based on the similarity of the neighboring streaklines. Similar streaklines correspond to similar trajectories of particles passing from neighboring pixels over a period of time. Hence, it captures the affinity of current and previous motions at these pixels. First, frame by frame optical flow of the video is computed. Using the optical flow, a set of particles are then moved over the frame to construct the streaklines and the streak flow (not yet implemented). These quantities are used to compute similarity in a 8-connectivity neighborhood. For every pair of pixels i and j, the similarity is computed in terms of streaklines and streak flow (only streaklines for now).
 
+## Team Members
+
+- Ravi Rahar   (19/11/EC/014)
+- Asad Nizami  (19/11/EC/013)
+- Umesh        (19/11/EC/015)
+- Harsh        (19/11/EC/016)
+
 ## TO-DO
 
 - [ ] Implement Streakflow
 - [ ] Give weightage to streakflow in similarity
 - [x] Make separate class
-- [ ] Implement similarity
+- [x] Implement similarity
 - [x] Implement watershed
 - [x] Implement Streaklines  
 - [x] Use Optical Flow
