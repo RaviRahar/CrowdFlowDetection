@@ -16,6 +16,7 @@ class CrowdFlowSegmentation:
         self.avg_opt_flow = np.zeros((self.vid_height, self.vid_width, 2), dtype=np.float64)
         self.mask = np.zeros_like(self.previous)
         self.pixel_pos_streaklines = self.init_pixel_pos_streaklines()
+        self.streaklines_color = np.full((self.vid_width//self.stride, self.vid_height//self.stride, 3), [0,255,255]) 
         # Create some random colors
         self.color = np.random.randint(0, 255, (100, 3))
         # Parameters for lucas kanade optical flow 
@@ -85,55 +86,72 @@ class CrowdFlowSegmentation:
         # flow contains dx, dy of point at x,y
         # each point in 3D array needs to be looked in flow array, then add dx,dy of that point and store it in next
         # frame position in 3D array
-        fi=self.frame_no
-        for f in self.pixel_pos_streaklines[self.frame_no::-1,:,:,:]:
-            xi=0
-            if(fi!=0):
-                for x in f:
-                    yi=0
-                    for y in x:
-                        for z in y:
-                            if z == 0:
-                                self.pixel_pos_streaklines[fi,xi,yi,z] = int(self.pixel_pos_streaklines[fi-1,xi,yi,z] - flow[...,0][xi, yi])
-                            else:
-                                self.pixel_pos_streaklines[fi,xi,yi,z] = int(self.pixel_pos_streaklines[fi-1,xi,yi,z] - flow[...,1][xi, yi])
-                        yi+=1
-                    xi+=1
-            fi-=1 
 
-        #for index, f in np.ndenumerate(self.pixel_pos_streaklines[self.frame_no::-1,:,:,:]):
-        #    f,x,y,z = index
-        #    for x in f:
-        #        for y in f:
-        #            if z == 0:
-        #                self.pixel_pos_streaklines[f,x,y,z] = self.pixel_pos_streaklines[0,x-1,y,z] - flow[..., 0][x,y]
-        #            else:
-        #                self.pixel_pos_streaklines[f,x,y,z] = self.pixel_pos_streaklines[0,x,y-1,z] - flow[..., 1][x,y]
+        fi=self.frame_no
+        for f in self.pixel_pos_streaklines[self.frame_no:0:-1,:,:,:]:
+            xi=0
+            for x in f:
+                yi=0
+                for y in x:
+                    try:
+                        x_pos = self.pixel_pos_streaklines[fi-1,xi,yi,0]
+                        y_pos = self.pixel_pos_streaklines[fi-1,xi,yi,1]
+                        x_val = round(self.pixel_pos_streaklines[fi-1,xi,yi,0] - flow[y_pos, x_pos, 0])
+                        y_val = round(self.pixel_pos_streaklines[fi-1,xi,yi,1] - flow[y_pos, x_pos, 1])
+                        if (x_val<self.vid_width and y_val<self.vid_height):
+                            self.pixel_pos_streaklines[fi,xi,yi,0] = x_val
+                            self.pixel_pos_streaklines[fi,xi,yi,1] = y_val
+                        else:
+                            pass
+                    except Exception as e:
+                        print(e)
+                    yi+=1
+                xi+=1
+            fi-=1 
 
         # Drawing streaklines
 
-        fi=self.frame_no
-        for f in self.pixel_pos_streaklines[self.frame_no::-1,:,:,:]:
-            xi_prev = 0
-            for x in f:
-                yi_prev = 0
-                for y in x:
-                    xi = self.pixel_pos_streaklines[fi,xi_prev, yi_prev,0]
-                    yi = self.pixel_pos_streaklines[fi,xi_prev, yi_prev,1]
-                    self.pixel_pos_streaklines[fi,xi_prev, yi_prev,0]
-                    img = cv.line(next, (y[0], y[1]), (xi, yi), (0,255,255), 2)                     
 
-                    yi_prev+=1
-                xi_prev+=1
+        fi=self.frame_no
+        for f in self.pixel_pos_streaklines[self.frame_no:0:-1,:,:,:]:
+            xi_ind = 0
+            for x in f:
+                yi_ind = 0
+                for y in x:
+                    if fi==0:
+                        try:
+                            img = cv.line(next, (y[0], y[1]), (y[0], y[1]), (0,255,255), 2)                     
+                        except Exception as e:
+                            print(e)
+                    else:
+                        xi = self.pixel_pos_streaklines[fi-1,xi_ind, yi_ind,0]
+                        yi = self.pixel_pos_streaklines[fi-1,xi_ind, yi_ind,1]
+                        try:
+                            if(y[0]==0 and y[1]==0):
+                                pass
+                            else: 
+                                self.update_streaklines_color(xi_ind, yi_ind, self.pixel_pos_streaklines[0,xi_ind, yi_ind,0], self.pixel_pos_streaklines[0,xi_ind, yi_ind,1], self.pixel_pos_streaklines[self.frame_no,xi_ind, yi_ind,0], self.pixel_pos_streaklines[self.frame_no,xi_ind, yi_ind,1])
+                                img = cv.line(next, (y[0], y[1]), (xi, yi), self.streaklines_color[xi_ind, yi_ind].tolist(), 2)
+                        except Exception as e:
+                            print(e)
+                        pass
+
+                    yi_ind+=1
+                xi_ind+=1
             fi-=1
+
+
+        if self.frame_no <= 2:
+            img=next
+
     
         self.previous_gray = next_gray.copy()
-        self.no_of_frames+=1
+        self.frame_no+=1
 
         return img
 
     def init_pixel_pos_streaklines(self):
-        pixel_pos_streaklines = np.full([self.no_of_frames, self.vid_width//self.stride, self.vid_height//self.stride, 2], None) 
+        pixel_pos_streaklines = np.full([self.no_of_frames, self.vid_width//self.stride, self.vid_height//self.stride, 2], 0) 
         for index, x in np.ndenumerate(pixel_pos_streaklines[0,:,:,:]):
             x,y,z = index
             if z == 0:
@@ -143,13 +161,27 @@ class CrowdFlowSegmentation:
 
         return pixel_pos_streaklines
 
+    def update_streaklines_color(self, xi_ind, yi_ind, x1, y1, x2, y2):
+        if (x1<x2 and y1<y2):
+            self.streaklines_color[xi_ind, yi_ind] = self.color[1].tolist()
+        elif (x1<x2 and y1>y2):
+            self.streaklines_color[xi_ind, yi_ind] = self.color[2].tolist()
+        elif (x1>x2 and y1<y2):
+            self.streaklines_color[xi_ind, yi_ind] = self.color[3].tolist()
+        elif (x1>x2 and y1>y2):
+            self.streaklines_color[xi_ind, yi_ind] = self.color[4].tolist()
+        else:
+            pass
+
 # expects image path and returns watershed image
-    def to_avg_opt_flow(self, next):
+
+    def to_similarity(self, next):
         next_gray = cv.cvtColor(next, cv.COLOR_BGR2GRAY)
         flow = cv.calcOpticalFlowFarneback(self.previous_gray, next_gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
-        self.avg_opt_flow+=(flow/(self.frame_no+2))
+        self.avg_opt_flow+=flow
+        avg_opt_flow = self.avg_opt_flow/(self.frame_no+2)
         #self.avg_opt_flow+=flow
-        mag, ang = cv.cartToPolar(self.avg_opt_flow[..., 0], self.avg_opt_flow[..., 1])
+        mag, ang = cv.cartToPolar(avg_opt_flow[..., 0], avg_opt_flow[..., 1])
 
         hsv = np.zeros_like(self.previous)
         hsv[..., 0] = ang*180/np.pi/2
@@ -219,4 +251,4 @@ class CrowdFlowSegmentation:
         markers = cv.watershed(img,markers)
         img[markers == -1] = [255,0,0]
     
-        return img
+        return sure_fg+unknown
